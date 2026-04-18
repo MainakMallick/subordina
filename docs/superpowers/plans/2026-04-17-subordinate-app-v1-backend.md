@@ -2,6 +2,59 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> ## ⚠ AMENDMENTS (applied 2026-04-17 after initial write-up)
+>
+> The spec was amended after this plan was drafted. The delta below applies **globally** — every task must be read through this lens. The spec (`docs/superpowers/specs/2026-04-17-subordinate-app-v1-design.md`) is the final authority.
+>
+> **A1. `Chat` entity exists between `Project` and `Invocation`.**
+> - `Invocation.chat_id` (not `Invocation.project_id`) is the foreign key. `Invocation` no longer has `project_id` or `context`.
+> - Every test fixture that creates an Invocation must first create a Project, then a Chat (with optional `root_path` override), then the Invocation with `chat_id=c.id`.
+> - See Task 3 (already revised) for the authoritative schema.
+>
+> **A2. No `Intervention` entity and no `/intervene` endpoint.**
+> - Drop the `Intervention` model, its tests, and the `/api/invocations/{id}/intervene` route entirely.
+> - Drop `redirected_to_invocation_id` from `Invocation` — the steer intervention no longer exists.
+> - `Invocation.status` valid values are: `running`, `verified`, `replied`, `deferred`, `cost-capped`, `cancelled`, `error`. No `redirected`.
+> - `Message.role` valid values are: `system`, `user-prompt`, `agent`, `tool`. No `user-intervention`.
+>
+> **A3. Add a `chat` pseudo-skill with `loop_type="plain"`.**
+> - Create `backend/skills/chat.py` alongside `query.py` and `deep_research.py`.
+> - System prompt: minimal — "You are answering a question in a research context; use file/web tools as needed; keep responses concise and honest about uncertainty."
+> - Tools: `("web_search", "read_file", "write_file")`.
+> - `loop_type="plain"`, `max_iterations=1`.
+> - `base.py` registers all three skills (chat, query, deep-research).
+> - `skills/__init__.py` registration flow: `register(CHAT_SKILL)`, `register(QUERY_SKILL)`, `register(DEEP_RESEARCH_SKILL)`.
+> - Tests in `test_skills.py` assert the chat skill is registered with `loop_type="plain"` and a `read_file`/`write_file`/`web_search` tool list.
+>
+> **A4. `RawRunner` must handle `loop_type="plain"`.**
+> - Added early exit: if `skill.loop_type == "plain"` and `response.stop_reason == "end_turn"` after the first turn (with no tool calls, or tool calls that completed), mark the invocation as `status="replied"` and return.
+> - For `review` / `convergence` loop types, behaviour is unchanged.
+> - A new test case in `test_runner_raw.py`: `test_plain_chat_skill_replies_in_one_turn` — MockLLMClient returns one `text` block with `stop_reason="end_turn"`, no tool calls; assert invocation status is `replied` and exactly one Checkpoint row exists.
+>
+> **A5. Skills router takes `chat_id`, not `project_id`.**
+> - `InvocationCreate` schema: `{ chat_id: str, input: str }`. Drop `context`.
+> - `POST /api/skills/{slug}/start` fetches the Chat, resolves the folder as `chat.root_path or project.root_path`, validates the folder exists (return 400 if not), creates Invocation with `chat_id`, spawns runner with the resolved `project_root` for that invocation.
+> - Tests create a Project → a Chat → then POST with `chat_id`.
+>
+> **A6. New Task 13b: Chats router.**
+> - Create `backend/routers/chats.py` with:
+>   - `POST /api/chats` — `{ project_id, title, root_path?: string }` → 201 `ChatOut`.
+>   - `GET /api/chats?project_id=...` → list.
+>   - `PATCH /api/chats/{id}` — `{ title?: str, root_path?: str | null }`.
+> - Mount in `main.py` (add to the imports and include_router calls in Task 16).
+> - Tests: create + list + rename.
+> - Insert this task between Task 13 and Task 14.
+>
+> **A7. Invocations router has no `/intervene`.**
+> - Task 14 drops the intervene endpoint, its schemas, its tests. Keep get + cancel.
+>
+> **A8. `RawRunner` resolves the folder per invocation.**
+> - When `run(invocation_id)` loads the Invocation, it also loads the Chat and Project and computes `project_root = chat.root_path or project.root_path`. That value is passed to the `ToolExecutor` for this invocation.
+> - Main.py no longer holds a single `project_root` on the runner; it's per-invocation.
+>
+> Apply these amendments as you encounter each task. When in doubt, spec wins.
+
+
 **Goal:** Build the FastAPI backend for Subordinate v1 — framework, enforcement modules, two skills (`Inquiry`, `Convergence`), REST + SSE API — producing a testable HTTP server that runs end-to-end against a mocked LLM client.
 
 **Architecture:** Python 3.11+ · FastAPI (async) · SQLAlchemy 2.0 (async, SQLite) · Anthropic SDK for the primary model · hand-rolled agent loop behind an `AgentRunner` abstract base · inline enforcement via tool handlers that raise typed exceptions · SSE for progress streaming · DB checkpoint per turn.
@@ -330,7 +383,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy import select
 
 from backend.db.models import (
-    Base, Project, Invocation, Checkpoint, Message, Intervention,
+    Base, Project, Chat, Invocation, Checkpoint, Message,
     ReviewLoopState, Candidate,
 )
 
@@ -345,20 +398,39 @@ async def session():
         yield s
 
 
-async def test_project_invocation_roundtrip(session):
+async def _seed_project_and_chat(session, chat_root=None):
     p = Project(name="radar-fault", root_path="/tmp/radar", user_id="u1")
     session.add(p)
     await session.commit()
+    c = Chat(project_id=p.id, title="First chat",
+             root_path=chat_root, user_id="u1")
+    session.add(c)
+    await session.commit()
+    return p, c
 
+
+async def test_chat_inherits_project_root_when_null(session):
+    p, c = await _seed_project_and_chat(session, chat_root=None)
+    assert c.root_path is None
+    assert p.root_path == "/tmp/radar"
+    # Resolution is caller-side: chat.root_path or project.root_path
+    effective = c.root_path or p.root_path
+    assert effective == "/tmp/radar"
+
+
+async def test_chat_overrides_project_root_when_set(session):
+    p, c = await _seed_project_and_chat(session, chat_root="/tmp/radar/ecg")
+    assert c.root_path == "/tmp/radar/ecg"
+    effective = c.root_path or p.root_path
+    assert effective == "/tmp/radar/ecg"
+
+
+async def test_invocation_belongs_to_chat(session):
+    p, c = await _seed_project_and_chat(session)
     inv = Invocation(
-        project_id=p.id,
-        skill_slug="query",
-        input="Q?",
-        context=None,
-        status="running",
-        user_id="u1",
-        total_cost_cents=0,
-        max_cost_cents=5000,
+        chat_id=c.id, skill_slug="query", input="Q?",
+        status="running", user_id="u1",
+        total_cost_cents=0, max_cost_cents=5000,
     )
     session.add(inv)
     await session.commit()
@@ -367,14 +439,12 @@ async def test_project_invocation_roundtrip(session):
     loaded = result.scalar_one()
     assert loaded.skill_slug == "query"
     assert loaded.status == "running"
-    assert loaded.project_id == p.id
+    assert loaded.chat_id == c.id
 
 
 async def test_checkpoint_belongs_to_invocation(session):
-    p = Project(name="p", root_path="/tmp/p", user_id="u1")
-    session.add(p)
-    await session.commit()
-    inv = Invocation(project_id=p.id, skill_slug="query", input="x",
+    p, c = await _seed_project_and_chat(session)
+    inv = Invocation(chat_id=c.id, skill_slug="query", input="x",
                      status="running", user_id="u1",
                      total_cost_cents=0, max_cost_cents=5000)
     session.add(inv)
@@ -390,25 +460,25 @@ async def test_checkpoint_belongs_to_invocation(session):
     assert len(result.scalars().all()) == 1
 
 
-async def test_intervention_kind_enforced(session):
-    p = Project(name="p", root_path="/tmp/p", user_id="u1")
-    session.add(p)
-    await session.commit()
-    inv = Invocation(project_id=p.id, skill_slug="query", input="x",
+async def test_invocation_status_check_constraint(session):
+    p, c = await _seed_project_and_chat(session)
+    inv = Invocation(chat_id=c.id, skill_slug="chat", input="x",
+                     status="bogus-status", user_id="u1",
+                     total_cost_cents=0, max_cost_cents=5000)
+    session.add(inv)
+    with pytest.raises(Exception):
+        await session.commit()
+
+
+async def test_message_role_check_constraint(session):
+    p, c = await _seed_project_and_chat(session)
+    inv = Invocation(chat_id=c.id, skill_slug="chat", input="x",
                      status="running", user_id="u1",
                      total_cost_cents=0, max_cost_cents=5000)
     session.add(inv)
     await session.commit()
-
-    iv = Intervention(invocation_id=inv.id, kind="annotate",
-                      content="please check X", target_claim_id=None)
-    session.add(iv)
-    await session.commit()
-    # If we got here, insert succeeded
-
-    iv2 = Intervention(invocation_id=inv.id, kind="bogus",
-                       content="x", target_claim_id=None)
-    session.add(iv2)
+    m = Message(invocation_id=inv.id, role="not-a-role", content="x")
+    session.add(m)
     with pytest.raises(Exception):
         await session.commit()
 ```
@@ -427,7 +497,6 @@ Expected: FAIL with `ModuleNotFoundError`
 """SQLAlchemy models for Subordinate v1."""
 from __future__ import annotations
 
-import enum
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -435,7 +504,7 @@ from typing import Any
 from sqlalchemy import (
     CheckConstraint, DateTime, ForeignKey, Integer, JSON, String, Text,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
 def _uuid() -> str:
@@ -465,24 +534,34 @@ class Project(Base, TimestampedMixin):
     user_id: Mapped[str] = mapped_column(String, nullable=False)
 
 
+class Chat(Base, TimestampedMixin):
+    """A conversation thread inside a project.
+
+    root_path is optional; when null, the chat inherits the project's root_path.
+    When set, it overrides the project for all invocations in this chat.
+    """
+    __tablename__ = "chats"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False)
+    title: Mapped[str] = mapped_column(String, nullable=False, default="New chat")
+    root_path: Mapped[str | None] = mapped_column(String, nullable=True)
+    user_id: Mapped[str] = mapped_column(String, nullable=False)
+
+
 class Invocation(Base, TimestampedMixin):
     __tablename__ = "invocations"
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
-    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False)
+    chat_id: Mapped[str] = mapped_column(ForeignKey("chats.id"), nullable=False)
     skill_slug: Mapped[str] = mapped_column(String, nullable=False)
     input: Mapped[str] = mapped_column(Text, nullable=False)
-    context: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String, nullable=False, default="running")
     user_id: Mapped[str] = mapped_column(String, nullable=False)
     total_cost_cents: Mapped[int] = mapped_column(Integer, default=0)
     max_cost_cents: Mapped[int] = mapped_column(Integer, default=5000)
-    redirected_to_invocation_id: Mapped[str | None] = mapped_column(
-        ForeignKey("invocations.id"), nullable=True
-    )
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('running','verified','deferred','cost-capped','cancelled','redirected','error')",
+            "status IN ('running','verified','replied','deferred','cost-capped','cancelled','error')",
             name="invocation_status_valid",
         ),
     )
@@ -512,26 +591,8 @@ class Message(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "role IN ('system','user-prompt','user-intervention','agent','tool')",
+            "role IN ('system','user-prompt','agent','tool')",
             name="message_role_valid",
-        ),
-    )
-
-
-class Intervention(Base):
-    __tablename__ = "interventions"
-    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
-    invocation_id: Mapped[str] = mapped_column(
-        ForeignKey("invocations.id"), nullable=False
-    )
-    kind: Mapped[str] = mapped_column(String, nullable=False)
-    content: Mapped[str] = mapped_column(Text, nullable=False)
-    target_claim_id: Mapped[str | None] = mapped_column(String, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
-
-    __table_args__ = (
-        CheckConstraint(
-            "kind IN ('annotate','flag','steer')", name="intervention_kind_valid"
         ),
     )
 
@@ -1984,7 +2045,10 @@ async def _prepare_invocation(factory, slug: str = "query") -> str:
         p = Project(name="p", root_path="/tmp", user_id="u1")
         s.add(p)
         await s.commit()
-        inv = Invocation(project_id=p.id, skill_slug=slug,
+        c = Chat(project_id=p.id, title="t", root_path=None, user_id="u1")
+        s.add(c)
+        await s.commit()
+        inv = Invocation(chat_id=c.id, skill_slug=slug,
                          input="test question", status="running",
                          user_id="u1", total_cost_cents=0, max_cost_cents=5000)
         s.add(inv)
