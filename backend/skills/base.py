@@ -1,13 +1,14 @@
-"""Minimal Skill registry stub for Task 10.
+"""Skill registry.
 
-Task 11 will replace the placeholder skills with full system prompts and
-add the `deep-research` skill. For now we expose the `Skill` dataclass
-shape used across the runner (slug, display_name, system_prompt, tools,
-loop_type, max_iterations) and pre-register the three skills the Task 10
-runner tests exercise: `chat` (plain), `query` (review), `deep-research`
-(convergence).
+`Skill` is the canonical dataclass shape every runner expects (slug,
+display_name, system_prompt, tools, loop_type, max_iterations). Each
+skill module defines a structurally-identical `_Skill` dataclass and
+exports a single instance; registration happens at package import time
+(`backend/skills/__init__.py`).
 
-Kept deliberately small; Task 11 owns the real prompts.
+The `SKILLS` dict is keyed by slug and is the only public interface the
+runners consume (see `backend/agent/runner_raw.py` and
+`runner_agent_sdk.py`).
 """
 from __future__ import annotations
 
@@ -31,48 +32,11 @@ class Skill:
 SKILLS: dict[str, Skill] = {}
 
 
-def register(skill: Skill) -> None:
-    SKILLS[skill.slug] = skill
+def register(skill) -> None:
+    """Register a skill by slug.
 
-
-# --- Task 10 stubs (Task 11 will extend / replace prompts) -----------------
-
-_CHAT_SKILL = Skill(
-    slug="chat",
-    display_name="Chat",
-    system_prompt=(
-        "You are answering a question in a research context; use file/web "
-        "tools as needed; keep responses concise and honest about uncertainty."
-    ),
-    tools=("web_search", "read_file", "write_file"),
-    loop_type="plain",
-    max_iterations=1,
-)
-
-_QUERY_SKILL = Skill(
-    slug="query",
-    display_name="Inquiry",
-    system_prompt="PLACEHOLDER — Task 11 will supply the Inquiry prompt.",
-    tools=(
-        "web_search", "read_file", "write_file",
-        "submit_draft", "submit_review", "submit_revision", "finalize",
-    ),
-    loop_type="review",
-    max_iterations=2,
-)
-
-_DEEP_RESEARCH_SKILL = Skill(
-    slug="deep-research",
-    display_name="Convergence",
-    system_prompt="PLACEHOLDER — Task 12 will supply the Convergence prompt.",
-    tools=(
-        "web_search", "read_file", "write_file",
-        "add_candidate", "challenge_leader", "score_iteration", "record_final",
-    ),
-    loop_type="convergence",
-    max_iterations=10,
-)
-
-register(_CHAT_SKILL)
-register(_QUERY_SKILL)
-register(_DEEP_RESEARCH_SKILL)
+    Accepts any object that is structurally compatible with `Skill`
+    (same attribute names) — each skill module defines its own local
+    `_Skill` dataclass to avoid circular imports.
+    """
+    SKILLS[skill.slug] = skill  # type: ignore[assignment]
