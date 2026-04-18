@@ -15,10 +15,12 @@ Loop-type -> ``max_turns`` mapping (per A10):
     convergence -> 30
 
 Finalization detection: a ``PostToolUse`` hook inspects every ``finalize`` and
-``record_final`` tool result; when one succeeds (no ``isError``), the hook sets
+``record_final`` tool result; when one succeeds (no error flag), the hook sets
 a flag and the ``async for`` loop breaks on the next message. Failed tool
-results never count as a finalization — the model sees ``isError`` and may
-retry.
+results never count as a finalization — the model sees the error and may
+retry. We check both ``is_error`` (the adapter's snake_case key and the SDK
+Python convention) and ``isError`` (the MCP wire-protocol camelCase key) so
+the hook is robust regardless of how the CLI serializes the tool response.
 
 Checkpointing: one ``Checkpoint`` row per ``AssistantMessage`` turn. Plain-chat
 invocations (which take a single turn) still get one checkpoint. Cost is
@@ -109,14 +111,21 @@ class AgentSdkRunner(AgentRunner):
 
         async def _post_tool_hook(input_data, tool_use_id, context):
             # PostToolUseHookInput is a TypedDict with top-level tool_name and
-            # tool_response keys. A failed tool result carries isError=True.
+            # tool_response keys. A failed tool result carries an error flag.
+            # We check both ``is_error`` (SDK Python convention; what the
+            # adapter in sdk_tools.py emits) and ``isError`` (MCP wire-protocol
+            # camelCase) so finalization detection works regardless of which
+            # shape the CLI hands us.
             try:
                 tool_name = input_data.get("tool_name", "") if isinstance(
                     input_data, dict
                 ) else ""
                 if tool_name in _FINALIZE_TOOL_IDS:
                     response = input_data.get("tool_response", {})
-                    if not (isinstance(response, dict) and response.get("isError")):
+                    is_err = isinstance(response, dict) and (
+                        response.get("is_error") or response.get("isError")
+                    )
+                    if not is_err:
                         finalized["done"] = True
             except Exception:
                 # Hook exceptions must not crash the run; finalize simply stays false.

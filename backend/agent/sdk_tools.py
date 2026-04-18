@@ -31,8 +31,15 @@ def _adapt(result: dict[str, Any]) -> dict[str, Any]:
     """Translate a ToolExecutor result into an SDK content-block response.
 
     Success -> {"content": [{"type": "text", "text": <json-or-string>}]}
-    Failure -> same shape plus ``"isError": True``; the model sees the error and
-    can retry. Failure never finalizes (matches RawRunner semantics).
+    Failure -> same shape plus ``"is_error": True``; the model sees the error
+    and can retry. Failure never finalizes (matches RawRunner semantics).
+
+    The key name is snake_case ``is_error`` because the claude-agent-sdk's
+    ``create_sdk_mcp_server.call_tool`` handler reads
+    ``result.get("is_error", False)`` to build the MCP ``CallToolResult``.
+    Using camelCase ``isError`` silently drops the error flag and the model
+    sees the error message as a *successful* result — which voids the entire
+    enforcement layer.
     """
     if result.get("ok"):
         payload = result.get("result", "")
@@ -40,15 +47,17 @@ def _adapt(result: dict[str, Any]) -> dict[str, Any]:
         return {"content": [{"type": "text", "text": text}]}
     return {
         "content": [{"type": "text", "text": result.get("error", "unknown error")}],
-        "isError": True,
+        "is_error": True,
     }
 
 
-def make_enforcement_mcp_server(executor: ToolExecutor):
-    """Build an in-process MCP server exposing the 11 enforcement tools.
+def build_enforcement_tools(executor: ToolExecutor) -> list:
+    """Build the list of ``SdkMcpTool`` objects for the 11 enforcement tools.
 
-    The ``executor`` carries the per-invocation ReviewLoop / ResearchLoop /
-    project_root state, so one server is built per invocation.
+    Exposed separately from ``make_enforcement_mcp_server`` so unit tests can
+    invoke each tool's async handler directly (``tool.handler(args)``) without
+    spawning a Claude Code subprocess. The returned list is stable in order
+    and used both by the real MCP server wrapper and by the tests.
     """
 
     # ---- file / search ----
@@ -101,7 +110,7 @@ def make_enforcement_mcp_server(executor: ToolExecutor):
 
     @tool(
         "finalize",
-        "Finalize the invocation. Blocks (returns isError) unless the review loop has passed.",
+        "Finalize the invocation. Blocks (returns is_error) unless the review loop has passed.",
         {},
     )
     async def _finalize(args: dict[str, Any]) -> dict[str, Any]:
@@ -135,26 +144,35 @@ def make_enforcement_mcp_server(executor: ToolExecutor):
 
     @tool(
         "record_final",
-        "Record the final recommendation. Blocks (returns isError) unless the research loop has converged.",
+        "Record the final recommendation. Blocks (returns is_error) unless the research loop has converged.",
         {"recommendation": str},
     )
     async def _record_final(args: dict[str, Any]) -> dict[str, Any]:
         return _adapt(executor.dispatch("record_final", args))
 
+    return [
+        _web_search,
+        _read_file,
+        _write_file,
+        _submit_draft,
+        _submit_review,
+        _submit_revision,
+        _finalize,
+        _add_candidate,
+        _challenge_leader,
+        _score_iteration,
+        _record_final,
+    ]
+
+
+def make_enforcement_mcp_server(executor: ToolExecutor):
+    """Build an in-process MCP server exposing the 11 enforcement tools.
+
+    The ``executor`` carries the per-invocation ReviewLoop / ResearchLoop /
+    project_root state, so one server is built per invocation.
+    """
     return create_sdk_mcp_server(
         name="subordina-enforcement",
         version="1.0.0",
-        tools=[
-            _web_search,
-            _read_file,
-            _write_file,
-            _submit_draft,
-            _submit_review,
-            _submit_revision,
-            _finalize,
-            _add_candidate,
-            _challenge_leader,
-            _score_iteration,
-            _record_final,
-        ],
+        tools=build_enforcement_tools(executor),
     )
