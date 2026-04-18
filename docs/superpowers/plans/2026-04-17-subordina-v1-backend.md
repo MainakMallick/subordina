@@ -57,6 +57,18 @@
 > - Applies to: Task 3 (done), Task 10 (runner tests), and any future task whose tests create an isolated engine instead of using `session.py`'s global factory.
 > - Tests that use `get_session_factory()` are unaffected — the global engine is disposed at process exit.
 >
+> **A10. Add `runner_agent_sdk.py` as the primary runtime; keep `runner_raw.py` as the unit-tested fallback.**
+> - After Task 10 (hand-rolled runner), add **Task 10b** to implement `backend/agent/runner_agent_sdk.py` as a second `AgentRunner` subclass that drives the loop via the `claude-agent-sdk` Python package (which wraps the Claude Code CLI as a subprocess).
+> - Requires runtime dependency: the Claude Code CLI binary must be installed on any machine running this runner. `pip install claude-agent-sdk` is the Python-side dep; Claude Code itself is a separate install (`curl -fsSL https://claude.ai/install.sh | sh` or equivalent). This is a documented operational requirement for production/SaaS deployment; v1 local use on the dev's own machine already has Claude Code.
+> - **`runner_raw.py` stays in the tree** as the unit-tested reference implementation and CI fallback. Do not delete it.
+> - Wiring in Task 16: config flag `AGENT_RUNNER = "agent_sdk" | "raw"` (default `"agent_sdk"` in prod, `"raw"` in test envs). `main.py` picks the implementation via `get_runner()`.
+> - Testing strategy for `runner_agent_sdk.py`: do **not** write unit tests that mock the Claude Code subprocess. Instead, rely on `test_runner_raw.py` for unit coverage of the loop semantics, and exercise `runner_agent_sdk` only through an E2E integration test (added in or alongside Task 16) marked `@pytest.mark.integration`, skipped by default in CI.
+> - Cost tracking: use `ResultMessage.total_cost_usd * 100` (cents) to populate `Invocation.total_cost_cents`. Honour `max_budget_usd` on the SDK options.
+> - Loop-type → SDK config mapping: `plain` = `max_turns=1`; `review` = `max_turns=15`; `convergence` = `max_turns=30`. Finalize/record_final detection via `PostToolUse` hook that sets a runner flag; `async for` loop breaks on the next message when the flag is set.
+> - Tool adapter: wrap each of the existing 11 `_h_*` handlers from `tool_handlers.py` as `@tool("name", "desc", {...}) async def ...` functions that call the enforcement loops and return SDK-compatible content. `{"ok": True, "result": ...}` → `{"content": [{"type": "text", "text": json.dumps(result)}]}`; `{"ok": False, "error": ...}` → `{"content": [{"type": "text", "text": error}], "isError": True}`.
+> - Enforcement gates stay inline in the handlers — **unchanged**. SDK adoption changes how the loop is driven, not how gates run.
+> - Checkpointing: `PostToolUse` hook writes a `Checkpoint` row with the current conversation state after every tool call. Plain-chat (no tools) gets a single final checkpoint on loop exit.
+>
 > Apply these amendments as you encounter each task. When in doubt, spec wins.
 
 
