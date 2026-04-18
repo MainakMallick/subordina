@@ -4,3 +4,15 @@
 # Ephemeral artifacts from the verified-Q&A (query) skill
 query_draft.md
 query_state.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+*.db
+*.db-journal
+.env
+backend/subordinate.db*
