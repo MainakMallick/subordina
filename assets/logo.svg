@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" width="320" height="320" role="img" aria-label="Subordina — ringed planet logo">
+  <title>Subordina</title>
+
+  <!-- Mask that exposes only the lower half of the canvas, used to clip the
+       front-arc of the rings so they appear to pass in front of the planet. -->
+  <defs>
+    <mask id="front-half-mask">
+      <rect x="0" y="0" width="320" height="320" fill="black"/>
+      <rect x="0" y="160" width="320" height="160" fill="white"/>
+    </mask>
+
+    <!-- Planet body gradient — warm amber with a softer rim. -->
+    <radialGradient id="planet-body" cx="42%" cy="38%" r="68%">
+      <stop offset="0%"  stop-color="#f0c86a"/>
+      <stop offset="55%" stop-color="#c29027"/>
+      <stop offset="100%" stop-color="#7a5a14"/>
+    </radialGradient>
+
+    <!-- Ring gradient — brighter on the visible side, fades on the back. -->
+    <linearGradient id="ring-gradient" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%"  stop-color="#8b6914" stop-opacity="0.55"/>
+      <stop offset="50%" stop-color="#d4a017" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#8b6914" stop-opacity="0.55"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Tilt the whole ring system; the planet stays axis-aligned. -->
+  <g transform="rotate(-18 160 160)">
+    <!-- BACK arcs of both rings (will be partially occluded by the planet). -->
+    <ellipse cx="160" cy="160" rx="140" ry="36"
+             fill="none" stroke="url(#ring-gradient)" stroke-width="5"/>
+    <ellipse cx="160" cy="160" rx="108" ry="24"
+             fill="none" stroke="url(#ring-gradient)" stroke-width="3"
+             opacity="0.8"/>
+  </g>
+
+  <!-- Planet body — in front of the back arcs. -->
+  <circle cx="160" cy="160" r="64" fill="url(#planet-body)"
+          stroke="#5a3f0a" stroke-width="1.5"/>
+
+  <!-- Subtle surface highlight (upper-left, specular). -->
+  <ellipse cx="142" cy="140" rx="18" ry="11"
+           fill="#fde4a5" opacity="0.35"/>
+
+  <!-- FRONT arcs of both rings (masked to the lower half so they appear to
+       pass in front of the planet's bottom). -->
+  <g transform="rotate(-18 160 160)" mask="url(#front-half-mask)">
+    <ellipse cx="160" cy="160" rx="140" ry="36"
+             fill="none" stroke="url(#ring-gradient)" stroke-width="5"/>
+    <ellipse cx="160" cy="160" rx="108" ry="24"
+             fill="none" stroke="url(#ring-gradient)" stroke-width="3"
+             opacity="0.9"/>
+  </g>
+</svg>

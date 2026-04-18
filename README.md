@@ -1,6 +1,11 @@
-# Subordina
+<p align="center">
+  <img src="assets/logo.svg" alt="Subordina" width="180" height="180">
+</p>
 
-Rigorous ML research workflows, on the command line.
+<h1 align="center">Subordina</h1>
+
+<p align="center"><em>Rigorous ML research workflows, on the command line.</em></p>
+
 
 Subordina wraps your research — questions, architecture searches, experiments, paper drafts — in an enforcement-driven agent loop that catches sycophancy, requires cited evidence, and never lets the model declare victory without a verification pass.
 
