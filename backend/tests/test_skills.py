@@ -1,7 +1,8 @@
 """Skill registry tests.
 
-Task 11: chat + query (Inquiry) have real system prompts, deep-research
-is still a placeholder (Task 12 replaces it).
+Task 12: all three skills (chat, query/Inquiry, deep-research/Convergence)
+have real system prompts. The Convergence prompt is checked for the
+structural vocabulary the convergence gate relies on.
 """
 from __future__ import annotations
 
@@ -77,10 +78,19 @@ def test_query_prompt_mentions_review_and_confidence():
     assert "evidence" in p
 
 
-def test_deep_research_prompt_is_still_placeholder():
-    # Task 12 replaces this with the real Convergence prompt.
+def test_deep_research_prompt_mentions_convergence_criteria():
+    # Task 12: the Convergence prompt must describe the iteration /
+    # challenge / streak vocabulary the convergence gate enforces, and
+    # at least two of the five scoring axes so the 5-axis scoring
+    # system is actually spelled out to the model.
     p = SKILLS["deep-research"].system_prompt
-    assert "PLACEHOLDER" in p
+    assert "PLACEHOLDER" not in p
+    lower = p.lower()
+    assert "iteration" in lower
+    assert "challenge" in lower
+    assert "streak" in lower or "consecutive" in lower
+    assert "theoretical" in lower
+    assert "feasibility" in lower
 
 
 # --- Structural shape -------------------------------------------------------
