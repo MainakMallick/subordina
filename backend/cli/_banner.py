@@ -1,11 +1,15 @@
-"""Subordina banner — Claude-Code-inspired rounded-box welcome.
+"""Subordina banner — wide, full-terminal-width banner with planet+rings logo.
 
-Shows a branded rounded box (Unicode box-drawing) with a colored glyph,
-name, tagline, help hint, and current working directory — same shape as
-Claude Code's startup screen, distinct glyph + color for Subordina.
+Spans the full terminal width with horizontal rules above and below.
+Left logo is a ringed planet (two rings). Right is a figlet wordmark
+of "SUBORDINA". Signature colour is amber-gold (scholarly + Saturn-like).
+
+Narrow terminals (< 80 cols) fall back to a compact boxed banner so the
+layout never wraps awkwardly.
 """
 from __future__ import annotations
 
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -13,96 +17,139 @@ from pathlib import Path
 import click
 
 
-# Box-drawing characters (Unicode). Renders in Windows Terminal,
-# PowerShell 7+, modern cmd.exe with UTF-8 code page, macOS/Linux.
-_TL, _TR, _BL, _BR = "\u256d", "\u256e", "\u2570", "\u256f"   # ╭ ╮ ╰ ╯
-_H, _V = "\u2500", "\u2502"                                    # ─ │
+# Layout
+WIDE_THRESHOLD = 80
+MAX_WIDTH = 120
 
-# Brand glyph — U+2726 BLACK FOUR POINTED STAR.
-# Distinct from Claude Code's teardrop-spoked asterisk.
-BRAND_GLYPH = "\u2726"
-
-BOX_WIDTH = 62  # inner column count; outer width = BOX_WIDTH + 2
+# Signature colour — amber/gold. Evokes Saturn's rings + scholarly warmth.
+BRAND_COLOR = "yellow"
 
 
-def _pad_plain(text: str, width: int) -> str:
-    """Pad `text` on the right to `width` visible columns."""
-    if len(text) >= width:
-        return text
-    return text + " " * (width - len(text))
+# Ringed planet, 5 rows tall. First ring pierces the planet body;
+# second ring orbits below. Matches the figlet-wordmark height.
+PLANET_ART = [
+    "    \u256d\u2500\u2500\u2500\u256e    ",
+    " \u2550\u2550\u2561     \u255e\u2550\u2550 ",
+    "   \u2502 \u25c9\u25c9\u25c9 \u2502   ",
+    "   \u2570\u2500\u2500\u2500\u2500\u2500\u256f   ",
+    " \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 ",
+]
+
+# Figlet "Standard" wordmark for SUBORDINA — 5 rows, 51 columns wide.
+SUBORDINA_ART = [
+    r" ____        _                     _ _             ",
+    r"/ ___| _   _| |__   ___  _ __ _ __(_|_)_ __   __ _ ",
+    r"\___ \| | | | '_ \ / _ \| '__| '__| | | '_ \ / _` |",
+    r" ___) | |_| | |_) | (_) | |  | |  | | | | | | (_| |",
+    r"|____/ \__,_|_.__/ \___/|_|  |_|  |_|_|_| |_|\__,_|",
+]
+
+TAGLINE = "rigorous ML research, verified."
+
+
+def _term_width() -> int:
+    w = shutil.get_terminal_size((100, 24)).columns
+    return max(40, min(w, MAX_WIDTH))
+
+
+def _shorten_cwd(cwd_display: str, max_len: int) -> str:
+    if len(cwd_display) <= max_len:
+        return cwd_display
+    return "..." + cwd_display[-(max_len - 3):]
 
 
 def print_banner(*, cwd: Path | None = None) -> None:
-    """Print the Subordina welcome box.
-
-    Format (modelled on Claude Code's startup):
-
-        ╭──────────────────────────────────────────────────────────────╮
-        │  ✦ Subordina                                                 │
-        │                                                              │
-        │    rigorous ML research, verified.                           │
-        │                                                              │
-        │    subordina --help  for commands                            │
-        │    cwd: <current folder>                                     │
-        ╰──────────────────────────────────────────────────────────────╯
-    """
+    """Print the Subordina banner, sized to the current terminal width."""
+    width = _term_width()
     actual_cwd = cwd or Path.cwd()
     cwd_display = str(actual_cwd)
-    # Room is BOX_WIDTH minus the "    cwd: " (9 chars) prefix and 1 char padding.
-    max_cwd_len = BOX_WIDTH - 10
-    if len(cwd_display) > max_cwd_len:
-        cwd_display = "..." + cwd_display[-(max_cwd_len - 3):]
+
+    if width < WIDE_THRESHOLD:
+        _print_compact(_shorten_cwd(cwd_display, width - 12))
+        return
+
+    _print_wide(width, _shorten_cwd(cwd_display, width - 12))
+
+
+def _print_wide(width: int, cwd_display: str) -> None:
+    rule_char = "\u2550"  # ═
 
     click.echo()
-    click.echo(_TL + (_H * BOX_WIDTH) + _TR)
+    click.secho(rule_char * width, fg=BRAND_COLOR)
+    click.echo()
 
-    # Name line: "  " + glyph (yellow) + " " + "Subordina" (bold). Pad the rest.
-    name_plain = f"  {BRAND_GLYPH} Subordina"
-    name_pad = " " * (BOX_WIDTH - len(name_plain))
+    for planet_row, text_row in zip(PLANET_ART, SUBORDINA_ART):
+        styled_planet = click.style(planet_row, fg=BRAND_COLOR, bold=True)
+        click.echo("   " + styled_planet + "    " + text_row)
+
+    click.echo()
+    tagline_line = "                    " + click.style(TAGLINE, dim=True)
+    click.echo(tagline_line)
+    click.echo()
+
+    click.secho(rule_char * width, fg=BRAND_COLOR)
+    click.echo()
+
+    hint_line = (
+        "    "
+        + click.style("subordina --help", bold=True)
+        + "  for commands"
+    )
+    click.echo(hint_line)
+    click.echo(f"    cwd: {cwd_display}")
+    click.echo()
+
+
+def _print_compact(cwd_display: str) -> None:
+    """Compact rounded-box banner for narrow terminals."""
+    tl, tr, bl, br = "\u256d", "\u256e", "\u2570", "\u256f"
+    h, v = "\u2500", "\u2502"
+    glyph = "\u2726"  # ✦
+
+    box_width = 62
+
+    click.echo()
+    click.echo(tl + (h * box_width) + tr)
+
+    name_plain = f"  {glyph} Subordina"
+    pad = " " * (box_width - len(name_plain))
     click.echo(
-        _V
+        v
         + "  "
-        + click.style(BRAND_GLYPH, fg="yellow", bold=True)
+        + click.style(glyph, fg=BRAND_COLOR, bold=True)
         + " "
         + click.style("Subordina", bold=True)
-        + name_pad
-        + _V
+        + pad
+        + v
     )
+    click.echo(v + (" " * box_width) + v)
 
-    _blank_line()
-
-    tagline = "rigorous ML research, verified."
-    tag_plain = f"    {tagline}"
-    tag_pad = " " * (BOX_WIDTH - len(tag_plain))
+    tag_content = "    " + TAGLINE
     click.echo(
-        _V
+        v
         + "    "
-        + click.style(tagline, dim=True)
-        + tag_pad
-        + _V
+        + click.style(TAGLINE, dim=True)
+        + " " * (box_width - len(tag_content))
+        + v
     )
+    click.echo(v + (" " * box_width) + v)
 
-    _blank_line()
+    hint_content = "    subordina --help  for commands"
+    click.echo(v + hint_content + " " * (box_width - len(hint_content)) + v)
 
-    hint = "subordina --help  for commands"
-    click.echo(_V + _pad_plain("    " + hint, BOX_WIDTH) + _V)
+    cwd_content = "    cwd: " + cwd_display
+    if len(cwd_content) > box_width:
+        cwd_content = cwd_content[: box_width - 3] + "..."
+    click.echo(v + cwd_content + " " * (box_width - len(cwd_content)) + v)
 
-    cwd_line = "    cwd: " + cwd_display
-    click.echo(_V + _pad_plain(cwd_line, BOX_WIDTH) + _V)
-
-    click.echo(_BL + (_H * BOX_WIDTH) + _BR)
+    click.echo(bl + (h * box_width) + br)
     click.echo()
-
-
-def _blank_line() -> None:
-    click.echo(_V + (" " * BOX_WIDTH) + _V)
 
 
 def paced_lines(lines: list[str], delay: float = 0.12) -> None:
-    """Print ``lines`` one per line with a short delay between them.
+    """Print ``lines`` with a small delay between them on a TTY.
 
-    Non-tty stdout collapses the delay to 0 so CI / piped output doesn't
-    wait. Gives the init moment a measured pace without being noisy.
+    Non-tty stdout collapses the delay to 0 so piped output doesn't wait.
     """
     if not sys.stdout.isatty():
         delay = 0.0
