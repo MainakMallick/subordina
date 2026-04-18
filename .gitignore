@@ -15,4 +15,4 @@ venv/
 *.db
 *.db-journal
 .env
-backend/subordinate.db*
+backend/subordina.db*

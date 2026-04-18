@@ -1,10 +1,10 @@
-# Subordinate — v1 design
+# Subordina — v1 design
 
 *Date: 2026-04-17 · Author: brainstorming session*
 
 ## 1. Summary
 
-Subordinate is a web application that wraps a set of enforcement-driven ML research skills — originally built as a Claude Code plugin — in a researcher-facing UI. The point of the app is not to replace the plugin; it is to prove, in a standalone surface that could eventually become a company, that the **enforcement-driven agentic loop** is load-bearing, legible, and worth using.
+Subordina is a web application that wraps a set of enforcement-driven ML research skills — originally built as a Claude Code plugin — in a researcher-facing UI. The point of the app is not to replace the plugin; it is to prove, in a standalone surface that could eventually become a company, that the **enforcement-driven agentic loop** is load-bearing, legible, and worth using.
 
 v1 ships two of the nine eventual skills: `Inquiry` (verified Q&A, 2-iteration review loop) and `Convergence` (iterated architecture search, convergence loop with ≥3 iterations and 2 consecutive defenses). Together they exercise both enforcement patterns and validate the framework before the other seven skills are added module-by-module.
 
@@ -51,7 +51,7 @@ This document is the frozen design that implementation must follow. The implemen
 ### 3.1 Top-level layout
 
 ```
-subordinate-app/
+subordina-app/
 ├── backend/                       # Python 3.11+, FastAPI
 │   ├── main.py
 │   ├── config.py
@@ -96,7 +96,7 @@ subordinate-app/
 Designed so future changes are one file, not a rewrite.
 
 1. **`agent/runner.py`.** `AgentRunner` is an abstract class. `runner_raw.py` is the v1 implementation. If we ever decide the Agent SDK is worth the boilerplate reduction, `runner_agent_sdk.py` drops in as a peer.
-2. **`enforcement/` copied from the plugin.** v1 copies the three modules verbatim and adapts them to raise exceptions rather than `sys.exit`. Later, both the plugin and the app should consume a shared `subordinate-core` package — but that's a refactor that waits until the API surface has stabilised.
+2. **`enforcement/` copied from the plugin.** v1 copies the three modules verbatim and adapts them to raise exceptions rather than `sys.exit`. Later, both the plugin and the app should consume a shared `subordina-core` package — but that's a refactor that waits until the API surface has stabilised.
 3. **`db/models.py`.** Every entity has `id`, `created_at`, `updated_at`, and `user_id` from day 1. For v1, `user_id` is a single hardcoded value. When authentication becomes real, the schema is already there.
 
 ### 3.3 Process model
@@ -216,7 +216,7 @@ The backend never uses these display strings. `lib/vocabulary.ts` is the single 
 
 The primary user-facing surface is a **chat thread**. Chats belong to a project; each chat is bound to a folder (the project's `root_path` by default, optionally overridden on creation). Default interaction is plain chat — normal Claude conversation against the chat's folder. Rigorous skills are invoked punctually.
 
-- **Plain chat is the default.** A message without a slash command runs as a plain-chat turn. No review loop, no verification, no confidence badge. Just a streamed response from the model, with `read_file` / `write_file` / `web_search` available. Plain chat bubbles are visually distinct (dashed border, header *Subordinate · chat*).
+- **Plain chat is the default.** A message without a slash command runs as a plain-chat turn. No review loop, no verification, no confidence badge. Just a streamed response from the model, with `read_file` / `write_file` / `web_search` available. Plain chat bubbles are visually distinct (dashed border, header *Subordina · chat*).
 - **Skills are invoked on demand.** A message beginning with `/inquiry` or `/convergence` starts that skill. The rigorous loop runs to completion. While it runs, the composer is locked to *Cancel only*. On completion, the verified artifact arrives as the next assistant bubble (solid border) with expansion affordances for review history, evidence trail, and reasoning trace.
 - **After a skill completes, the conversation returns to plain chat.** The next message without a slash is plain chat, not a fresh skill invocation.
 - **Chat is bound to a folder.** Every chat has an effective `root_path`. Tools operate on that folder only; path-traversal is blocked.

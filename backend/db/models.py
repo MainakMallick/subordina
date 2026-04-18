@@ -1,4 +1,4 @@
-"""SQLAlchemy models for Subordinate v1."""
+"""SQLAlchemy models for Subordina v1."""
 from __future__ import annotations
 
 import uuid

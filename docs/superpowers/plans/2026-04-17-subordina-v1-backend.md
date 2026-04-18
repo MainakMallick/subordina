@@ -1,10 +1,10 @@
-# Subordinate v1 — Backend Implementation Plan
+# Subordina v1 — Backend Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 > ## ⚠ AMENDMENTS (applied 2026-04-17 after initial write-up)
 >
-> The spec was amended after this plan was drafted. The delta below applies **globally** — every task must be read through this lens. The spec (`docs/superpowers/specs/2026-04-17-subordinate-app-v1-design.md`) is the final authority.
+> The spec was amended after this plan was drafted. The delta below applies **globally** — every task must be read through this lens. The spec (`docs/superpowers/specs/2026-04-17-subordina-app-v1-design.md`) is the final authority.
 >
 > **A1. `Chat` entity exists between `Project` and `Invocation`.**
 > - `Invocation.chat_id` (not `Invocation.project_id`) is the foreign key. `Invocation` no longer has `project_id` or `context`.
@@ -60,7 +60,7 @@
 > Apply these amendments as you encounter each task. When in doubt, spec wins.
 
 
-**Goal:** Build the FastAPI backend for Subordinate v1 — framework, enforcement modules, two skills (`Inquiry`, `Convergence`), REST + SSE API — producing a testable HTTP server that runs end-to-end against a mocked LLM client.
+**Goal:** Build the FastAPI backend for Subordina v1 — framework, enforcement modules, two skills (`Inquiry`, `Convergence`), REST + SSE API — producing a testable HTTP server that runs end-to-end against a mocked LLM client.
 
 **Architecture:** Python 3.11+ · FastAPI (async) · SQLAlchemy 2.0 (async, SQLite) · Anthropic SDK for the primary model · hand-rolled agent loop behind an `AgentRunner` abstract base · inline enforcement via tool handlers that raise typed exceptions · SSE for progress streaming · DB checkpoint per turn.
 
@@ -71,7 +71,7 @@
 - pydantic-settings (config), pydantic v2 (schemas)
 - pytest, pytest-asyncio, pytest-httpx (for SSE tests)
 
-**Reference spec:** `docs/superpowers/specs/2026-04-17-subordinate-app-v1-design.md`
+**Reference spec:** `docs/superpowers/specs/2026-04-17-subordina-app-v1-design.md`
 
 **Out of scope for this plan (in Plan 2):** All of `frontend/`. Also skipped: real LLM API integration tests in CI, auth, multi-user, integrations, vendor-swapping.
 
@@ -80,7 +80,7 @@
 ## File structure created by this plan
 
 ```
-subordinate-app/
+subordina-app/
 ├── backend/
 │   ├── pyproject.toml
 │   ├── .env.example
@@ -146,7 +146,7 @@ subordinate-app/
 
 ```toml
 [project]
-name = "subordinate-backend"
+name = "subordina-backend"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
@@ -188,7 +188,7 @@ include = ["backend*"]
 ```
 ANTHROPIC_API_KEY=sk-ant-REPLACE-ME
 DEFAULT_MODEL=claude-opus-4-7
-DB_PATH=./subordinate.db
+DB_PATH=./subordina.db
 PROJECT_ROOT=./
 MAX_COST_CENTS_PER_INVOCATION=5000
 ```
@@ -205,7 +205,7 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 
-app = FastAPI(title="Subordinate", version="0.1.0")
+app = FastAPI(title="Subordina", version="0.1.0")
 
 
 @app.get("/api/health")
@@ -250,7 +250,7 @@ venv/
 *.db
 *.db-journal
 .env
-backend/subordinate.db*
+backend/subordina.db*
 ```
 
 - [ ] **Step 7: Install backend dev deps and verify the app starts**
@@ -336,7 +336,7 @@ class Settings(BaseSettings):
 
     anthropic_api_key: str
     default_model: str = "claude-opus-4-7"
-    db_path: Path = Path("subordinate.db")
+    db_path: Path = Path("subordina.db")
     project_root: Path = Path(".")
     max_cost_cents_per_invocation: int = Field(default=5000, ge=0)
 
@@ -499,7 +499,7 @@ Expected: FAIL with `ModuleNotFoundError`
 - [ ] **Step 3: Implement `backend/db/models.py`**
 
 ```python
-"""SQLAlchemy models for Subordinate v1."""
+"""SQLAlchemy models for Subordina v1."""
 from __future__ import annotations
 
 import uuid
@@ -2948,7 +2948,7 @@ from backend.db.session import create_all
 from backend.routers import skills as skills_router
 
 
-app = FastAPI(title="Subordinate", version="0.1.0")
+app = FastAPI(title="Subordina", version="0.1.0")
 
 
 @app.on_event("startup")
@@ -3463,7 +3463,7 @@ from backend.routers import invocations as invocations_router
 from backend.routers import events as events_router
 
 
-app = FastAPI(title="Subordinate", version="0.1.0")
+app = FastAPI(title="Subordina", version="0.1.0")
 
 
 def get_llm_client():

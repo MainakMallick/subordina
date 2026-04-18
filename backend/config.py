@@ -17,7 +17,7 @@ class Settings(BaseSettings):
 
     anthropic_api_key: str
     default_model: str = "claude-opus-4-7"
-    db_path: Path = Path("subordinate.db")
+    db_path: Path = Path("subordina.db")
     project_root: Path = Path(".")
     max_cost_cents_per_invocation: int = Field(default=5000, ge=0)
 

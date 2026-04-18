@@ -14,11 +14,11 @@ Plugin source (reference implementation to port from): `C:\Users\mmallick7\subor
 
 ## North star
 
-Subordinate should be to academic ML research what the Superpowers Claude Code plugin is to software development: **smooth, rigorous, flexible, all-rounded**. Every design decision is tested against this frame. The 9-skill roadmap (Inquiry, Convergence, Survey, Implementation, Revision, Manuscript, Experiment, Analysis, Extension) is the committed long-term plan — v1's two skills are a foundation, not the product. Do not declare v1 "done" as if shipping.
+Subordina should be to academic ML research what the Superpowers Claude Code plugin is to software development: **smooth, rigorous, flexible, all-rounded**. Every design decision is tested against this frame. The 9-skill roadmap (Inquiry, Convergence, Survey, Implementation, Revision, Manuscript, Experiment, Analysis, Extension) is the committed long-term plan — v1's two skills are a foundation, not the product. Do not declare v1 "done" as if shipping.
 
 ## Repository state
 
-Backend scaffold on `feat/v1-backend`. Tasks 1-2 of the 17-task implementation plan (`docs/superpowers/plans/2026-04-17-subordinate-app-v1-backend.md`) are complete. The spec is at `docs/superpowers/specs/2026-04-17-subordinate-app-v1-design.md`; its AMENDMENTS block at the top of the plan captures late-stage changes to the data model (Chat entity, chat skill, folder override, no intervention).
+Project renamed to **Subordina** (was: Subordinate). Backend scaffold on `feat/v1-backend`. Tasks 1-7 of the 17-task implementation plan (`docs/superpowers/plans/2026-04-17-subordina-v1-backend.md`) are complete. The spec is at `docs/superpowers/specs/2026-04-17-subordina-v1-design.md`; its AMENDMENTS block at the top of the plan captures late-stage changes to the data model (Chat entity, chat skill, folder override, no intervention).
 
 ## Hard constraints (non-negotiable)
 
