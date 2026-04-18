@@ -52,6 +52,11 @@
 > - When `run(invocation_id)` loads the Invocation, it also loads the Chat and Project and computes `project_root = chat.root_path or project.root_path`. That value is passed to the `ToolExecutor` for this invocation.
 > - Main.py no longer holds a single `project_root` on the runner; it's per-invocation.
 >
+> **A9. Test fixtures that create their own async SQLite engine MUST dispose the engine on teardown.**
+> - Any pytest fixture that does `engine = create_async_engine("sqlite+aiosqlite:///:memory:")` must end with `await engine.dispose()` (after `yield`). Otherwise aiosqlite's `Connection.__del__` fires a `ResourceWarning`/`PytestUnraisableExceptionWarning` on GC, which fails the suite under `-W error`.
+> - Applies to: Task 3 (done), Task 10 (runner tests), and any future task whose tests create an isolated engine instead of using `session.py`'s global factory.
+> - Tests that use `get_session_factory()` are unaffected — the global engine is disposed at process exit.
+>
 > Apply these amendments as you encounter each task. When in doubt, spec wins.
 
 
