@@ -8,6 +8,11 @@ import click
 
 from backend import __version__
 from backend.cli.commands.chat import chat_group
+from backend.cli.commands.invoke import (
+    convergence_command,
+    inquiry_command,
+    say_command,
+)
 from backend.cli.commands.project import init_command
 
 
@@ -17,7 +22,7 @@ from backend.cli.commands.project import init_command
         "Subordina — rigorous ML research workflows on the command line.\n\n"
         "Commands for managing projects, chats, and verified inquiries. "
         "Run `subordina <command> --help` for details.\n\n"
-        "Coming in later tasks: `say`, `/inquiry`, `/convergence`, `history`, `show`."
+        "Coming in later tasks: `history`, `show`."
     ),
 )
 @click.version_option(__version__, "-V", "--version", prog_name="subordina")
@@ -33,6 +38,9 @@ def version() -> None:
 
 cli.add_command(init_command)
 cli.add_command(chat_group)
+cli.add_command(say_command)
+cli.add_command(inquiry_command)
+cli.add_command(convergence_command)
 
 
 if __name__ == "__main__":

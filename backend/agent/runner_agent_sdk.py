@@ -28,7 +28,7 @@ derived from ``ResultMessage.total_cost_usd * 100`` when the SDK reports it.
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 
 from claude_agent_sdk import (
     AssistantMessage,
@@ -65,11 +65,25 @@ _FINALIZE_TOOL_IDS = {
 
 
 class AgentSdkRunner(AgentRunner):
-    """``AgentRunner`` implementation that delegates to the Claude Code CLI."""
+    """``AgentRunner`` implementation that delegates to the Claude Code CLI.
 
-    def __init__(self, *, session_factory, model: str):
+    ``on_message`` is an optional callback invoked for every message streamed by
+    the underlying ``ClaudeSDKClient`` (both ``AssistantMessage`` and
+    ``ResultMessage``). Default ``None`` keeps the historical silent behaviour;
+    the CLI passes a callback that prints text/tool_use blocks as they arrive.
+    Callback exceptions are swallowed so a broken sink never crashes a run.
+    """
+
+    def __init__(
+        self,
+        *,
+        session_factory,
+        model: str,
+        on_message: Callable[[Any], None] | None = None,
+    ):
         self._sf = session_factory
         self._model = model
+        self._on_message = on_message
         self._cancelled: set[str] = set()
 
     def cancel(self, invocation_id: str) -> None:
@@ -156,6 +170,12 @@ class AgentSdkRunner(AgentRunner):
                     if invocation_id in self._cancelled:
                         await self._mark(invocation_id, "cancelled")
                         return
+                    if self._on_message is not None:
+                        try:
+                            self._on_message(msg)
+                        except Exception:
+                            # Streaming callbacks must never crash the loop.
+                            pass
                     if isinstance(msg, AssistantMessage):
                         turn += 1
                         # Checkpoint after every assistant turn (even plain chat).
