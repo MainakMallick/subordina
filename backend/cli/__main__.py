@@ -7,6 +7,8 @@ from __future__ import annotations
 import click
 
 from backend import __version__
+from backend.cli.commands.chat import chat_group
+from backend.cli.commands.project import init_command
 
 
 @click.group(
@@ -15,7 +17,7 @@ from backend import __version__
         "Subordina — rigorous ML research workflows on the command line.\n\n"
         "Commands for managing projects, chats, and verified inquiries. "
         "Run `subordina <command> --help` for details.\n\n"
-        "Coming in later tasks: `init`, `chat`, `say`, `/inquiry`, `/convergence`, `history`, `show`."
+        "Coming in later tasks: `say`, `/inquiry`, `/convergence`, `history`, `show`."
     ),
 )
 @click.version_option(__version__, "-V", "--version", prog_name="subordina")
@@ -27,6 +29,10 @@ def cli() -> None:
 def version() -> None:
     """Print the installed Subordina version."""
     click.echo(f"Subordina v{__version__}")
+
+
+cli.add_command(init_command)
+cli.add_command(chat_group)
 
 
 if __name__ == "__main__":
