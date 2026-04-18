@@ -14,13 +14,15 @@ This document is the frozen design that implementation must follow. The implemen
 
 ### In v1.0
 
-- Two skills: `Inquiry`, `Convergence`
-- Local web application (FastAPI backend + Next.js frontend)
-- Single-project UI; SQLite schema is multi-project-ready from day 1
-- Hand-rolled agent loop against the primary model API, with enforcement inline
-- Async task per invocation, SSE for progress, DB checkpoints after every turn
-- Mid-run user intervention (annotate, flag, steer) — all logged, none bypassing verification
-- Scholarly visual register (serif body, hairline rules, italicised status, monospace numerals)
+- **Three interaction modes** in the chat: plain chat (default) plus two rigorous skills — `Inquiry` and `Convergence`.
+- **Chat-dominant UI.** Chats belong to a project; each chat is bound to a folder (`chat.root_path` override, defaulting to `project.root_path`). Skills invoked via slash commands (`/inquiry`, `/convergence`); everything else is plain chat.
+- **File + web tools.** All three modes (plain chat, Inquiry, Convergence) can read and write inside the chat's folder, and do web searches. No code execution, no GPU — those arrive with `Experiment` in v1.5.
+- **Local web application** (FastAPI backend + Next.js frontend).
+- **Single-project UI; SQLite schema is multi-project-ready** from day 1.
+- **Hand-rolled agent loop** against the primary model API, with enforcement inline. `runner_raw.py` is v1; `runner_agent_sdk.py` is a documented future swap.
+- **Async task per invocation, SSE for progress, DB checkpoints** after every model turn.
+- **No mid-skill intervention.** Skills run uninterrupted to completion. Cancel is the only control during a running skill.
+- **Scholarly visual register** with softened edges (8-10px radius, subtle shadows).
 
 ### Deferred, in order
 
@@ -110,39 +112,44 @@ Designed so future changes are one file, not a rewrite.
 |---|---|
 | `main.py` | FastAPI app instance, router mounts, static-file serving in prod |
 | `config.py` | Reads API key, model name, DB path, project root |
-| `routers/skills.py` | `GET /api/skills` (list), `POST /api/skills/{slug}/start` |
-| `routers/invocations.py` | `GET /api/invocations`, `GET /api/invocations/{id}`, `POST /api/invocations/{id}/cancel`, `POST /api/invocations/{id}/intervene` |
+| `routers/projects.py` | Projects CRUD: `POST /api/projects`, `GET /api/projects` |
+| `routers/chats.py` | Chats CRUD: `POST /api/chats` (accepts optional `root_path` override), `GET /api/chats?project_id=`, `PATCH /api/chats/{id}` (rename) |
+| `routers/skills.py` | `GET /api/skills` (list skills), `POST /api/skills/{slug}/start` — accepts `chat_id` |
+| `routers/invocations.py` | `GET /api/invocations`, `GET /api/invocations/{id}`, `POST /api/invocations/{id}/cancel` |
 | `routers/events.py` | `GET /api/invocations/{id}/events` — Server-Sent Events |
 | `agent/runner.py` | Abstract base: `run(invocation) -> None`, `cancel()` |
-| `agent/runner_raw.py` | Drives the loop using the raw LLM API; inline enforcement; checkpoints per turn |
-| `agent/tools.py` | Tool schema definitions and Python handlers: `web_search`, `read_file`, `write_file`, `submit_draft`, `submit_review`, `record_candidate`, `challenge_leader`, `record_final`, `finalize` |
-| `skills/base.py` | `Skill` dataclass: `slug`, `display_name`, `system_prompt`, `tools`, `max_iterations`, `loop_type` (review vs convergence) |
+| `agent/runner_raw.py` | Drives the loop using the raw LLM API; inline enforcement; checkpoints per turn; for `loop_type="plain"` runs exactly one turn and terminates on `end_turn` |
+| `agent/tools.py` | Tool schema definitions and Python handlers: `web_search`, `read_file`, `write_file`, `submit_draft`, `submit_review`, `submit_revision`, `record_candidate`, `challenge_leader`, `record_final`, `finalize` |
+| `skills/base.py` | `Skill` dataclass: `slug`, `display_name`, `system_prompt`, `tools`, `max_iterations`, `loop_type` (review \| convergence \| plain) |
+| `skills/chat.py` | `Skill(slug="chat", display_name="chat", loop_type="plain", ...)` — plain Q&A with file + web tools, no enforcement |
 | `skills/query.py` | `Skill(slug="query", display_name="Inquiry", ...)` — system prompt, checklist, 2-iteration review loop |
 | `skills/deep_research.py` | `Skill(slug="deep-research", display_name="Convergence", ...)` — system prompt, 5-axis scoring, convergence loop |
 | `enforcement/review_loop.py` | Ported from plugin; enforces ≥50-char critique, finalization gate |
 | `enforcement/research_loop.py` | Ported; enforces ≥3 iterations, 2-streak before `record_final` |
 | `enforcement/critique_quality.py` | Mechanical checks: length, rubber-stamp patterns, substance |
-| `db/models.py` | `Project`, `Invocation`, `Checkpoint`, `Message`, `Intervention`, `ReviewLoopState`, `Candidate` |
+| `db/models.py` | `Project`, `Chat`, `Invocation`, `Checkpoint`, `Message`, `ReviewLoopState`, `Candidate` |
 | `db/session.py` | SQLAlchemy 2.0 async engine, session factory |
 
 ### 4.2 Frontend modules
 
 | Module | Purpose |
 |---|---|
-| `app/page.tsx` | Project register (landing page with sidebar + recent-work table) |
-| `app/skills/[slug]/page.tsx` | New-invocation input form |
-| `app/invocations/[id]/page.tsx` | Invocation view — dispatches to the right component by skill |
-| `components/Sidebar.tsx` | Nine methods, two active in v1, rest greyed |
-| `components/InquiryView.tsx` | New / in-flight / verified states of an `Inquiry` |
-| `components/ConvergenceView.tsx` | New / in-flight / verified / deferred states of a `Convergence` |
-| `components/ReasoningTrace.tsx` | Streaming text pane with `[role]` line markers |
-| `components/InterveneBar.tsx` | Input box with annotate / flag / steer kind-picker |
-| `components/ReviewHistoryDrawer.tsx` | Expandable drawer listing reviewer critiques and user interventions on a single timeline |
-| `components/EvidenceTrail.tsx` | Drawer: which source supports which claim |
+| `app/page.tsx` | Project selector / new-chat landing |
+| `app/chats/[id]/page.tsx` | Chat thread — the primary surface |
+| `components/Sidebar.tsx` | Chats in the current project; nine methods greyed/active per version |
+| `components/Chat.tsx` | Chat thread container; renders messages in order |
+| `components/Composer.tsx` | Input with `+` (attach, v2), send/cancel, slash-command hint |
+| `components/PlainBubble.tsx` | Dashed-border assistant bubble for plain chat turns |
+| `components/InquiryBubble.tsx` | Solid-border assistant bubble for Inquiry; in-progress and verified states |
+| `components/ConvergenceBubble.tsx` | Solid-border bubble for Convergence; inline candidates expansion |
+| `components/ReasoningTrace.tsx` | Streaming text pane with `[role]` line markers, rendered inside a bubble |
+| `components/ReviewHistoryDrawer.tsx` | Expansion: reviewer critiques on a single timeline |
+| `components/EvidenceTrail.tsx` | Expansion: which source supports which claim |
 | `components/CandidatesTable.tsx` | 5-axis scored candidates with disposition |
 | `components/ConvergenceTrace.tsx` | Tufte-style line of numerals showing leader score by iteration |
 | `lib/api.ts` | Typed REST client; Zod-validated responses |
 | `lib/events.ts` | `useInvocationEvents(id)` hook wrapping EventSource |
+| `lib/slash.ts` | Parses a user message to detect `/inquiry` / `/convergence` — routes to the right skill |
 | `lib/vocabulary.ts` | One file mapping `slug → display name` and internal status terms to UI terms |
 
 ### 4.3 Vocabulary (slug → UI name)
@@ -198,20 +205,24 @@ The backend never uses these display strings. `lib/vocabulary.ts` is the single 
    - Check the cancellation flag; if set, terminate cleanly
    - Check the cost cap; if exceeded, terminate with status `cost-capped`
    - Loop until the skill's `finalize` tool succeeds, or the skill-specific iteration limit is hit
-4. **User intervention.** `POST /api/invocations/{id}/intervene` accepts `{ kind: "annotate" | "flag" | "steer", content, target?: claim_id }`. Backend inserts an `Intervention` row and pushes a `[user]` message into the conversation history. Like cancellation, interventions are only applied *between turns* — if a tool is mid-execution when the intervention arrives, the row is written immediately but the `[user]` message is queued until the current turn completes. The reviewer's checklist includes an item that requires substantive acknowledgement of user interventions. A `steer` intervention terminates the current invocation with status `redirected` and creates a new invocation prefilled with the prior conversation plus the steer note; `redirected_to_invocation_id` links the two.
-5. **Cancellation.** `POST /api/invocations/{id}/cancel` flips a flag. The loop checks between turns only; no mid-tool kill. Partial state is preserved.
-6. **Finalization.** When a skill's `finalize` tool succeeds (which itself runs the enforcement finalisation check), backend marks the invocation `finalized`, emits a final SSE event, and the UI fetches the artifact.
-7. **Reload-resilience.** SSE is best-effort. On reload, the frontend re-subscribes and also fetches the latest `Checkpoint` to render current state. The DB is the source of truth.
+4. **Folder resolution.** When a skill starts, the runner resolves the working folder as `chat.root_path ?? project.root_path`. The `ToolExecutor` is constructed with this resolved path; every `read_file` / `write_file` call is sandboxed to it by `_safe_join`, which rejects any path that escapes the resolved root.
+5. **Plain chat turns.** The `chat` skill (`loop_type="plain"`) runs exactly one model turn and terminates on `end_turn`. No review loop, no convergence loop, no enforcement — just a streamed response with the same file and web tools available. Plain-chat invocations end with status `replied` instead of `verified`.
+6. **Cancellation.** `POST /api/invocations/{id}/cancel` flips a flag. The loop checks between turns only; no mid-tool kill. Partial state is preserved.
+7. **Finalization.** When a skill's `finalize` tool succeeds (which itself runs the enforcement finalisation check), backend marks the invocation `verified`, emits a final SSE event, and the UI fetches the artifact. `Convergence` terminates on successful `record_final` with the same status.
+8. **No mid-skill intervention.** While a skill invocation is running, the UI composer is locked to *Cancel* only. The loop runs to completion uninterrupted. If the user wants to change direction, they cancel and re-invoke. This simplification was chosen deliberately; reinstating mid-run intervention is a future consideration, not v1.
+9. **Reload-resilience.** SSE is best-effort. On reload, the frontend re-subscribes and also fetches the latest `Checkpoint` to render current state. The DB is the source of truth.
 
-### 5.2 Interaction model (amended — chat-dominant)
+### 5.2 Interaction model (amended — chat with punctual skills)
 
-The primary user-facing surface is a **chat thread per project**. The rigorous submit-verify-read cycle still happens on every message, but in the backend — the user's experience is conversational, not form-driven.
+The primary user-facing surface is a **chat thread**. Chats belong to a project; each chat is bound to a folder (the project's `root_path` by default, optionally overridden on creation). Default interaction is plain chat — normal Claude conversation against the chat's folder. Rigorous skills are invoked punctually.
 
-- **Chat-dominant UI.** The user types naturally. Each message is routed to a skill — via slash commands (`/inquiry`, `/convergence`) or via a subtle UI control — and each triggers one `Invocation` under the hood, rendered as an assistant bubble in the chat. The formal surfaces we mocked up (candidates table, convergence trace, review-history drawer) are *expansion panels* reachable from a chat message, not the primary view.
-- **Verification is folded into the chat, not forced onto the user.** A running invocation appears inline as an "in progress…" bubble with expandable affordances (*show reasoning trace · show candidates · show review history*). The artifact — verified answer or recommendation — arrives as the next assistant bubble.
-- **Mid-run intervention is just chat.** While an invocation is in flight, the user types another message; the system records it as an intervention (*annotate* / *flag* / *steer*) and feeds it into the running invocation's next turn. Every intervention is logged; the reviewer's checklist requires substantive acknowledgement.
-- **Follow-ups are natural.** A follow-up is simply the next message in the same chat thread. Prior-invocation context threads automatically; no explicit "begin a follow-up" action is required.
-- **Skill invocations remain the unit of work.** From the backend's perspective, nothing changes — every user message still kicks off a skill, runs the loop, and produces a verified artifact. The chat is a rendering, not a different primitive.
+- **Plain chat is the default.** A message without a slash command runs as a plain-chat turn. No review loop, no verification, no confidence badge. Just a streamed response from the model, with `read_file` / `write_file` / `web_search` available. Plain chat bubbles are visually distinct (dashed border, header *Subordinate · chat*).
+- **Skills are invoked on demand.** A message beginning with `/inquiry` or `/convergence` starts that skill. The rigorous loop runs to completion. While it runs, the composer is locked to *Cancel only*. On completion, the verified artifact arrives as the next assistant bubble (solid border) with expansion affordances for review history, evidence trail, and reasoning trace.
+- **After a skill completes, the conversation returns to plain chat.** The next message without a slash is plain chat, not a fresh skill invocation.
+- **Chat is bound to a folder.** Every chat has an effective `root_path`. Tools operate on that folder only; path-traversal is blocked.
+- **No mid-skill intervention in v1.** The loop runs uninterrupted. Cancel + re-invoke is the escape hatch; mid-run annotation/flag/steer is deferred.
+- **Follow-ups are natural.** A follow-up is simply the next message in the same chat thread. Prior messages are included as context automatically.
+- **Every turn — plain chat or skill — is an `Invocation` in the backend.** The chat skill has `loop_type="plain"`; Inquiry has `loop_type="review"`; Convergence has `loop_type="convergence"`. The runner treats all three, terminating each appropriately.
 
 ## 6. Data model
 
@@ -220,13 +231,20 @@ The primary user-facing surface is a **chat thread per project**. The rigorous s
 ```
 Project
   id, name, root_path, created_at, updated_at, user_id
+  // root_path is required; the default folder for chats in this project
+
+Chat
+  id, project_id, title, root_path, created_at, updated_at, user_id
+  // root_path is optional (nullable); null = inherit from project
+  // title is a short human label (first user message truncated is fine)
 
 Invocation
-  id, project_id, skill_slug, input, context, status,
+  id, chat_id, skill_slug, input, status,
   created_at, updated_at, user_id,
-  total_cost_cents (internal), max_cost_cents (internal),
-  redirected_to_invocation_id  // non-null when the user steered
-  // status ∈ {running, verified, deferred, cost-capped, cancelled, redirected, error}
+  total_cost_cents (internal), max_cost_cents (internal)
+  // status ∈ {running, verified, replied, deferred, cost-capped, cancelled, error}
+  // - verified: review-loop or convergence-loop skill completed successfully
+  // - replied: plain-chat skill completed (single turn, end_turn)
 
 Checkpoint
   id, invocation_id, iteration, conversation_json,
@@ -235,14 +253,8 @@ Checkpoint
 
 Message
   id, invocation_id, role, content, created_at
-  // role ∈ {system, user-prompt, user-intervention, agent, tool}
-  // - user-intervention: what the researcher typed mid-run
+  // role ∈ {system, user-prompt, agent, tool}
   // - agent: every model turn regardless of sub-role (researcher/reviewer/challenger)
-
-Intervention
-  id, invocation_id, kind, content, target_claim_id,
-  created_at
-  // kind ∈ {annotate, flag, steer}
 
 ReviewLoopState
   id, invocation_id, skill_slug, iteration, status,
@@ -275,7 +287,9 @@ Every `Checkpoint` writes the running cost in cents. The `Invocation` has a `max
 | SSE client disconnection | Server keeps running; on reconnect the client reads checkpoint state to catch up; event buffer holds last N events per invocation for resumption |
 | DB write failure | Log, fail the invocation with status `error`; state prior to the failure is preserved via WAL |
 | Skill finalization called before loop passed | Enforcement module raises; the agent sees the raise and keeps working |
-| User steers mid-run | Old invocation marked `redirected`; new invocation started with the old one referenced as context |
+| Unknown skill slug on `/skills/{slug}/start` | Return `404`; no invocation created |
+| Invalid `chat_id` on `/skills/.../start` | Return `404`; no invocation created |
+| Folder doesn't exist when resolved at skill start | Return `400`; invocation not created; UI prompts to set `chat.root_path` |
 
 ### Failure modes that are not handled in v1
 
@@ -325,7 +339,8 @@ These aren't features; they're properties the architecture must keep true.
 
 - Which exact web-search tool to use for `Inquiry` and `Convergence`. The API's built-in web search is one option; a dedicated search provider is another. This is a runner-level decision; the skill code shouldn't care.
 - Exact SSE event schema — field names and envelope shape. Drafted here, finalised in the implementation plan.
-- How the frontend renders the "flag a claim" intervention UI — whether clicking a specific line in the streaming trace should highlight it and pre-fill the intervention kind, or whether flag is a plain-text note that references a line by paste. Defer to the implementation plan.
+- Whether the frontend exposes a per-chat folder picker at creation time, or defers folder override to a chat-settings panel. Frontend plan decision.
+- Whether plain-chat turns should also be visible in the `/api/invocations` list, or filtered out by default since they are trivial. Backend plan decision.
 
 ## 12. What this spec does not include
 
