@@ -18,7 +18,11 @@ Subordina should be to academic ML research what the Superpowers Claude Code plu
 
 ## Repository state
 
-Project renamed to **Subordina** (was: Subordinate). Backend scaffold on `feat/v1-backend`. Tasks 1-7 of the 17-task implementation plan (`docs/superpowers/plans/2026-04-17-subordina-v1-backend.md`) are complete. The spec is at `docs/superpowers/specs/2026-04-17-subordina-v1-design.md`; its AMENDMENTS block at the top of the plan captures late-stage changes to the data model (Chat entity, chat skill, folder override, no intervention).
+Project renamed to **Subordina** (was: Subordinate). Backend scaffold on `feat/v1-backend`. Tasks 1-12 + Task 10b of the plan (`docs/superpowers/plans/2026-04-17-subordina-v1-backend.md`) are complete; 74 tests pass with `-W error` plus 2 integration stubs.
+
+**v1 pivoted to CLI target** (amendment A11, 2026-04-17). Originally a web app; after the founder clarified the monetisation path ("build CLI first, validate with researchers, then web SaaS"), the remaining tasks 13-16 were cancelled. New tasks 13-17 build a Click-based `subordina` CLI that uses the already-shipped backend as a library. Web frontend deferred indefinitely pending CLI validation.
+
+Read the AMENDMENTS block at the top of the plan file — A1-A11 capture every late-stage change (Chat entity, chat skill, folder override, no intervention, Agent SDK runner, CLI pivot). The spec's PIVOT NOTICE at the top of the design doc says the same thing.
 
 ## Hard constraints (non-negotiable)
 

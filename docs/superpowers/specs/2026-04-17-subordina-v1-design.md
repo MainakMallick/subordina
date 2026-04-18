@@ -2,6 +2,23 @@
 
 *Date: 2026-04-17 · Author: brainstorming session*
 
+> ## ⚠ PIVOT NOTICE (2026-04-17, post-Task-12)
+>
+> After Tasks 1-12 + Task 10b landed, the founder clarified the monetisation path: **build a CLI first, validate demand with ~10 ML researchers, then build the web SaaS if validation succeeds.**
+>
+> **v1 ships as a CLI (`subordina` Python entrypoint), not a web app.** The backend code built in Tasks 1-12 is a library the CLI uses directly; no HTTP routers, no SSE, no frontend in v1.
+>
+> The chat-dominant UI spec below (sections 4.2, 5.2, visual register) remains authoritative design material for **v2 (web SaaS)** if CLI validation succeeds. Read it as "how the web version will look when we build it," not "what v1 ships."
+>
+> Concretely, for v1:
+> - User interaction: `subordina say "..."`, `subordina /inquiry "..."`, `subordina /convergence "..."`
+> - Persistence: SQLite in `.subordina/state.db` inside the user's project folder
+> - Streaming: stdout with a simple progress header; no SSE
+> - Auth / monetisation: deferred to v1.1 — v1 uses the user's own `ANTHROPIC_API_KEY`
+> - Plan 2 (frontend) is indefinitely deferred; do not build without an explicit green light after CLI validation
+>
+> Sections 4.1 (backend modules), 5.1 (data flow), 6 (data model), 7 (error handling), 8 (testing), 9 (non-functional) remain correct. Only the delivery surface changed from web UI to CLI.
+
 ## 1. Summary
 
 Subordina is a web application that wraps a set of enforcement-driven ML research skills — originally built as a Claude Code plugin — in a researcher-facing UI. The point of the app is not to replace the plugin; it is to prove, in a standalone surface that could eventually become a company, that the **enforcement-driven agentic loop** is load-bearing, legible, and worth using.

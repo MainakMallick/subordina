@@ -57,6 +57,21 @@
 > - Applies to: Task 3 (done), Task 10 (runner tests), and any future task whose tests create an isolated engine instead of using `session.py`'s global factory.
 > - Tests that use `get_session_factory()` are unaffected — the global engine is disposed at process exit.
 >
+> **A11. PIVOT from web-app frontend to CLI target.**
+> - Dated 2026-04-17 after Tasks 1-12 + 10b landed and the founder clarified the monetisation path: "build CLI first, validate, then web."
+> - **Tasks 13-16 (routers + wire-up) are CANCELLED.** No FastAPI routers ship in v1. No SSE events endpoint. No web frontend in Plan 2.
+> - **New v1 target:** a Python CLI (`subordina` entrypoint) that invokes the skills directly via `AgentSdkRunner` / `RawRunner`. Local SQLite (`.subordina/state.db` in the project folder) replaces the server's DB. Output streams to stdout.
+> - **What stays** (already built, unchanged): `config.py`, `db/models.py`, `db/session.py`, all `enforcement/*`, all `skills/*`, all `agent/*`. 12 tasks of backend code is directly reusable as a library.
+> - **What changes:** no HTTP layer, no web frontend, no SSE. The CLI is a thin command parser on top of what we have.
+> - **New Task sequence** (replacing old 13-16):
+>   - **Task 13 (CLI)** — Scaffold `backend/cli/` package with a Click-based entrypoint and `subordina --help`. Add `[project.scripts]` entry to `pyproject.toml` so `pip install -e .` produces a `subordina` binary.
+>   - **Task 14 (CLI)** — Project & chat management commands: `subordina init [FOLDER]`, `subordina chat new [--title] [--folder]`, `subordina chat list`, `subordina chat show <id>`.
+>   - **Task 15 (CLI)** — Invocation commands: `subordina say "message"` (plain chat), `subordina /inquiry "question"`, `subordina /convergence "problem"`. Streams the reasoning trace to stdout with a tqdm-style progress header. Writes artefacts to the chat folder.
+>   - **Task 16 (CLI)** — History + retrieval: `subordina history [--chat=<id>]`, `subordina show <invocation_id>` (renders the verified artefact).
+>   - **Task 17 (CLI)** — E2E integration smoke test + README + installation instructions.
+> - **Monetisation scaffolding is explicitly deferred to v1.1.** v1 ships without license-key gating — users bring their own Anthropic API key and use the CLI freely. Validation first, monetisation after demand is confirmed.
+> - **Web frontend (Plan 2) is deferred indefinitely**, contingent on CLI validation. Keep the chat-dominant UI mockups and spec as reference design for when/if a SaaS tier is built.
+> 
 > **A10. Add `runner_agent_sdk.py` as the primary runtime; keep `runner_raw.py` as the unit-tested fallback.**
 > - After Task 10 (hand-rolled runner), add **Task 10b** to implement `backend/agent/runner_agent_sdk.py` as a second `AgentRunner` subclass that drives the loop via the `claude-agent-sdk` Python package (which wraps the Claude Code CLI as a subprocess).
 > - Requires runtime dependency: the Claude Code CLI binary must be installed on any machine running this runner. `pip install claude-agent-sdk` is the Python-side dep; Claude Code itself is a separate install (`curl -fsSL https://claude.ai/install.sh | sh` or equivalent). This is a documented operational requirement for production/SaaS deployment; v1 local use on the dev's own machine already has Claude Code.
