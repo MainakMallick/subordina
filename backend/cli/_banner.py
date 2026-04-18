@@ -1,9 +1,11 @@
-"""Subordina CLI banner — minimal terminal-friendly header.
+"""Subordina CLI banner — block-character Saturn mark + letterspaced wordmark.
 
-A proper logo (vector) lives at `assets/logo.svg` for README / website / social
-use. Terminals can't render raster or vector art, so the CLI banner stays
-minimal: a single-line wordmark with one accent glyph, framed by full-width
-rules in the signature amber colour.
+The real logo is a vector file at ``assets/logo.svg`` (used in README /
+website / favicon). The terminal can't render vector art, so this banner
+approximates the logo with chunky Unicode block characters and two ring
+lines, all painted in the signature amber-gold.
+
+Narrow terminals (< 80 cols) fall back to a compact rounded-box banner.
 """
 from __future__ import annotations
 
@@ -16,14 +18,27 @@ import click
 
 
 MAX_WIDTH = 120
+WIDE_THRESHOLD = 80
 
-# Signature colour — amber / gold. Saturn-ish, scholarly warmth.
+# Signature colour — amber / gold. Matches assets/logo.svg's #d4a017.
 BRAND_COLOR = "yellow"
 
-# Single accent glyph — U+25C9 FISHEYE. Reads as a ringed planet at a glance.
-GLYPH = "\u25c9"
 
-WORDMARK = "Subordina"
+# Block-character planet with two rings, 6 rows tall, 20 columns wide.
+# Row 3 has a ring piercing through the planet; row 6 is an orbital ring.
+# Quarter-block characters (▗ ▖ ▘ ▝ ▟ ▙ ▜ ▛) round the corners of the
+# planet body.
+PLANET_ART = [
+    "      \u2584\u2584\u2584\u2584\u2584\u2584\u2584\u2584      ",
+    "   \u2597\u2584\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2584\u2596   ",
+    "\u2550\u2550\u255f\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2562\u2550\u2550",
+    "   \u259d\u2580\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2580\u2598   ",
+    "      \u2580\u2580\u2580\u2580\u2580\u2580\u2580\u2580      ",
+    "   \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550   ",
+]
+
+# Letterspaced wordmark — bold but not figlet. Reads as a logotype.
+WORDMARK = "S U B O R D I N A"
 TAGLINE = "rigorous ML research, verified."
 
 
@@ -39,29 +54,42 @@ def _shorten_cwd(cwd_display: str, max_len: int) -> str:
 
 
 def print_banner(*, cwd: Path | None = None) -> None:
-    """Print the Subordina banner, sized to the current terminal width."""
+    """Print the Subordina banner sized to the current terminal width."""
     width = _term_width()
     actual_cwd = cwd or Path.cwd()
     cwd_display = _shorten_cwd(str(actual_cwd), width - 12)
 
+    if width < WIDE_THRESHOLD:
+        _print_compact(cwd_display)
+        return
+
+    _print_wide(width, cwd_display)
+
+
+def _print_wide(width: int, cwd_display: str) -> None:
     rule_char = "\u2550"  # ═
 
     click.echo()
     click.secho(rule_char * width, fg=BRAND_COLOR)
     click.echo()
 
-    # Wordmark line: "    <glyph>   Subordina"
-    # Glyph is amber bold; wordmark is bold default colour.
-    click.echo(
-        "    "
-        + click.style(GLYPH, fg=BRAND_COLOR, bold=True)
-        + "   "
-        + click.style(WORDMARK, bold=True)
-    )
-    # Tagline line: aligned under the wordmark (8 spaces to match the glyph+gap).
-    click.echo("        " + click.style(TAGLINE, dim=True))
-    click.echo()
+    # Wordmark appears on the middle row of the planet art; tagline on the
+    # row below. Other rows have spaces after the planet.
+    wordmark_row = 2  # zero-indexed
+    tagline_row = 3
 
+    for i, planet_row in enumerate(PLANET_ART):
+        prefix = "    "
+        styled_planet = click.style(planet_row, fg=BRAND_COLOR, bold=True)
+        if i == wordmark_row:
+            suffix = "    " + click.style(WORDMARK, bold=True)
+        elif i == tagline_row:
+            suffix = "    " + click.style(TAGLINE, dim=True)
+        else:
+            suffix = ""
+        click.echo(prefix + styled_planet + suffix)
+
+    click.echo()
     click.secho(rule_char * width, fg=BRAND_COLOR)
     click.echo()
 
@@ -71,6 +99,52 @@ def print_banner(*, cwd: Path | None = None) -> None:
         + "  for commands"
     )
     click.echo(f"    cwd: {cwd_display}")
+    click.echo()
+
+
+def _print_compact(cwd_display: str) -> None:
+    """Compact rounded-box banner for narrow terminals (< 80 cols)."""
+    tl, tr, bl, br = "\u256d", "\u256e", "\u2570", "\u256f"
+    h, v = "\u2500", "\u2502"
+    glyph = "\u25c9"  # ◉
+
+    box_width = 62
+
+    click.echo()
+    click.echo(tl + (h * box_width) + tr)
+
+    name_plain = f"  {glyph} Subordina"
+    pad = " " * (box_width - len(name_plain))
+    click.echo(
+        v
+        + "  "
+        + click.style(glyph, fg=BRAND_COLOR, bold=True)
+        + " "
+        + click.style("Subordina", bold=True)
+        + pad
+        + v
+    )
+    click.echo(v + (" " * box_width) + v)
+
+    tag_content = "    " + TAGLINE
+    click.echo(
+        v
+        + "    "
+        + click.style(TAGLINE, dim=True)
+        + " " * (box_width - len(tag_content))
+        + v
+    )
+    click.echo(v + (" " * box_width) + v)
+
+    hint_content = "    subordina --help  for commands"
+    click.echo(v + hint_content + " " * (box_width - len(hint_content)) + v)
+
+    cwd_content = "    cwd: " + cwd_display
+    if len(cwd_content) > box_width:
+        cwd_content = cwd_content[: box_width - 3] + "..."
+    click.echo(v + cwd_content + " " * (box_width - len(cwd_content)) + v)
+
+    click.echo(bl + (h * box_width) + br)
     click.echo()
 
 
