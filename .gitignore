@@ -1,0 +1,5 @@
+.superpowers/
+
+# Ephemeral artifacts from the verified-Q&A (query) skill
+query_draft.md
+query_state.json
