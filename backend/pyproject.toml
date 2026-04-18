@@ -8,6 +8,7 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0",
     "aiosqlite>=0.19",
     "anthropic>=0.39",
+    "claude-agent-sdk>=0.1.63",
     "pydantic>=2.6",
     "pydantic-settings>=2.2",
     "sse-starlette>=2.0",
@@ -26,6 +27,9 @@ dev = [
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = [".", ".."]
+markers = [
+    "integration: end-to-end tests that spawn a real Claude Code subprocess and hit the Anthropic API; skipped unless RUN_INTEGRATION=1",
+]
 
 [build-system]
 requires = ["setuptools>=68"]
