@@ -203,12 +203,15 @@ The backend never uses these display strings. `lib/vocabulary.ts` is the single 
 6. **Finalization.** When a skill's `finalize` tool succeeds (which itself runs the enforcement finalisation check), backend marks the invocation `finalized`, emits a final SSE event, and the UI fetches the artifact.
 7. **Reload-resilience.** SSE is best-effort. On reload, the frontend re-subscribes and also fetches the latest `Checkpoint` to render current state. The DB is the source of truth.
 
-### 5.2 Interaction model (restated)
+### 5.2 Interaction model (amended — chat-dominant)
 
-- **Submit, wait, read.** No chat thread. A question is a submission; the answer is a verified artifact.
-- **Mid-run intervention.** User may annotate, flag, or steer at any time during a running invocation. Every intervention is logged as a first-class event.
-- **Drawers, not pages.** All post-hoc inspection (review history, evidence trail, full reasoning trace) opens in expandable drawers in place.
-- **Follow-up inquiries.** A verified artifact offers a "begin a follow-up" action that starts a new invocation prefilled with a reference to the prior one.
+The primary user-facing surface is a **chat thread per project**. The rigorous submit-verify-read cycle still happens on every message, but in the backend — the user's experience is conversational, not form-driven.
+
+- **Chat-dominant UI.** The user types naturally. Each message is routed to a skill — via slash commands (`/inquiry`, `/convergence`) or via a subtle UI control — and each triggers one `Invocation` under the hood, rendered as an assistant bubble in the chat. The formal surfaces we mocked up (candidates table, convergence trace, review-history drawer) are *expansion panels* reachable from a chat message, not the primary view.
+- **Verification is folded into the chat, not forced onto the user.** A running invocation appears inline as an "in progress…" bubble with expandable affordances (*show reasoning trace · show candidates · show review history*). The artifact — verified answer or recommendation — arrives as the next assistant bubble.
+- **Mid-run intervention is just chat.** While an invocation is in flight, the user types another message; the system records it as an intervention (*annotate* / *flag* / *steer*) and feeds it into the running invocation's next turn. Every intervention is logged; the reviewer's checklist requires substantive acknowledgement.
+- **Follow-ups are natural.** A follow-up is simply the next message in the same chat thread. Prior-invocation context threads automatically; no explicit "begin a follow-up" action is required.
+- **Skill invocations remain the unit of work.** From the backend's perspective, nothing changes — every user message still kicks off a skill, runs the loop, and produces a verified artifact. The chat is a rendering, not a different primitive.
 
 ## 6. Data model
 
