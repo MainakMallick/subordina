@@ -34,7 +34,7 @@ def test_init_creates_subordina_dir_and_db(tmp_path):
     code, output = _run(["init", str(target)])
 
     assert code == 0, output
-    assert "Initialized project" in output
+    assert "initialized project" in output.lower()
     assert str(target) in output
     subdir = target / ".subordina"
     db = subdir / "state.db"

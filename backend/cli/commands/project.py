@@ -6,6 +6,7 @@ from pathlib import Path
 import click
 from sqlalchemy import select
 
+from backend.cli._banner import paced_lines, print_banner
 from backend.cli._db import (
     SUBORDINA_DIRNAME,
     STATE_DB_FILENAME,
@@ -56,8 +57,17 @@ def init_command(folder: Path | None) -> None:
     target = (folder if folder is not None else Path.cwd()).resolve()
     target.mkdir(parents=True, exist_ok=True)
 
+    print_banner()
+    paced_lines([
+        f"  > preparing project at {target}",
+        f"  > creating {SUBORDINA_DIRNAME}/{STATE_DB_FILENAME}",
+        "  > writing schema",
+    ])
+
     name, already = run(_init_project(target))
+
+    click.echo()
     if already:
-        click.echo(f"Project already initialized at {target}")
+        click.secho(f"[ok] project already initialized at {target}", bold=True)
     else:
-        click.echo(f"Initialized project '{name}' at {target}")
+        click.secho(f"[ok] initialized project '{name}' at {target}", bold=True)
